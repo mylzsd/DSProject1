@@ -28,3 +28,8 @@ Thumbs.db
 ##############
 .idea/*
 *.iml
+
+# Project handouts #
+####################
+*.pdf
+*.htm
