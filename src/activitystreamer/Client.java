@@ -40,45 +40,35 @@ public class Client {
 		
 		CommandLine cmd = null;
 		try {
-			cmd = parser.parse( options, args);
+			cmd = parser.parse(options, args);
 		} catch (ParseException e1) {
 			help(options);
 		}
 	
-		if(cmd.hasOption("rh")){
+		if (cmd.hasOption("rh")) {
 			Settings.setRemoteHostname(cmd.getOptionValue("rh"));
 		}
 		
-		if(cmd.hasOption("rp")){
-			try{
+		if (cmd.hasOption("rp")) {
+			try {
 				int port = Integer.parseInt(cmd.getOptionValue("rp"));
 				Settings.setRemotePort(port);
 			} catch (NumberFormatException e){
-				log.error("-rp requires a port number, parsed: "+cmd.getOptionValue("rp"));
+				log.error("-rp requires a port number, parsed: " + cmd.getOptionValue("rp"));
 				help(options);
 			}
 		}
 		
-		if(cmd.hasOption("s")){
+		if (cmd.hasOption("s")) {
 			Settings.setSecret(cmd.getOptionValue("s"));
 		}
 		
-		if(cmd.hasOption("u")){
+		if (cmd.hasOption("u")) {
 			Settings.setUsername(cmd.getOptionValue("u"));
 		}
 		
-		
 		log.info("starting client");
 		
-		
-		
-		
-			
-		ClientSkeleton c = ClientSkeleton.getInstance(); 
-				
-			
-		
+		ClientSkeleton c = ClientSkeleton.getInstance();
 	}
-
-	
 }

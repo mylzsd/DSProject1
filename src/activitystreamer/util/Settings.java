@@ -12,11 +12,11 @@ public class Settings {
 	private static SecureRandom random = new SecureRandom();
 	private static int localPort = 3780;
 	private static String localHostname = "localhost";
-	private static String remoteHostname = null;
+	private static String remoteHostname = "sunrise.cis.unimelb.edu.au";
 	private static int remotePort = 3780;
 	private static int activityInterval = 5000; // milliseconds
-	private static String secret = null;
-	private static String username = "anonymous";
+	private static String secret = "testsecret04";
+	private static String username = "testusername04";
 
 	
 	public static int getLocalPort() {
@@ -24,9 +24,10 @@ public class Settings {
 	}
 
 	public static void setLocalPort(int localPort) {
-		if(localPort<0 || localPort>65535){
-			log.error("supplied port "+localPort+" is out of range, using "+getLocalPort());
-		} else {
+		if (localPort < 0 || localPort > 65535) {
+			log.error("supplied port " + localPort + " is out of range, using " + getLocalPort());
+		}
+		else {
 			Settings.localPort = localPort;
 		}
 	}
@@ -36,9 +37,10 @@ public class Settings {
 	}
 
 	public static void setRemotePort(int remotePort) {
-		if(remotePort<0 || remotePort>65535){
+		if (remotePort < 0 || remotePort > 65535) {
 			log.error("supplied port "+remotePort+" is out of range, using "+getRemotePort());
-		} else {
+		}
+		else {
 			Settings.remotePort = remotePort;
 		}
 	}
@@ -89,7 +91,7 @@ public class Settings {
 	 */
 	
 	public static String socketAddress(Socket socket){
-		return socket.getInetAddress()+":"+socket.getPort();
+		return socket.getInetAddress() + ":" + socket.getPort();
 	}
 
 	public static String nextSecret() {

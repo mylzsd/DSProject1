@@ -67,7 +67,7 @@ public class Control extends Thread {
 	 * A new incoming connection has been established, and a reference is returned to it
 	 */
 	public synchronized Connection incomingConnection(Socket s) throws IOException{
-		log.debug("incomming connection: "+Settings.socketAddress(s));
+		log.debug("incomming connection: " + Settings.socketAddress(s));
 		Connection c = new Connection(s);
 		connections.add(c);
 		return c;
