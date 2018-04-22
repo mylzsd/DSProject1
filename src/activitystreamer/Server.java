@@ -19,7 +19,7 @@ import activitystreamer.util.Settings;
 public class Server {
 	private static final Logger log = LogManager.getLogger();
 	
-	private static void help(Options options){
+	private static void help(Options options) {
 		String header = "An ActivityStream Server for Unimelb COMP90015\n\n";
 		String footer = "\ncontact aharwood@unimelb.edu.au for issues.";
 		HelpFormatter formatter = new HelpFormatter();
@@ -50,7 +50,7 @@ public class Server {
 			help(options);
 		}
 		
-		if(cmd.hasOption("lp")){
+		if (cmd.hasOption("lp")) {
 			try{
 				int port = Integer.parseInt(cmd.getOptionValue("lp"));
 				Settings.setLocalPort(port);
@@ -60,11 +60,11 @@ public class Server {
 			}
 		}
 		
-		if(cmd.hasOption("rh")){
+		if (cmd.hasOption("rh")) {
 			Settings.setRemoteHostname(cmd.getOptionValue("rh"));
 		}
 		
-		if(cmd.hasOption("rp")){
+		if (cmd.hasOption("rp")) {
 			try{
 				int port = Integer.parseInt(cmd.getOptionValue("rp"));
 				Settings.setRemotePort(port);
@@ -74,7 +74,7 @@ public class Server {
 			}
 		}
 		
-		if(cmd.hasOption("a")){
+		if (cmd.hasOption("a")) {
 			try{
 				int a = Integer.parseInt(cmd.getOptionValue("a"));
 				Settings.setActivityInterval(a);
@@ -90,11 +90,11 @@ public class Server {
 			log.warn("failed to get localhost IP address");
 		}
 		
-		if(cmd.hasOption("lh")){
+		if (cmd.hasOption("lh")) {
 			Settings.setLocalHostname(cmd.getOptionValue("lh"));
 		}
 
-		if(cmd.hasOption("s")){
+		if (cmd.hasOption("s")) {
 			Settings.setSecret(cmd.getOptionValue("s"));
 		}
 		
@@ -109,7 +109,7 @@ public class Server {
 				c.setTerm(true);
 				c.interrupt();
 		    }
-		 });
+		});
 	}
 
 }

@@ -23,7 +23,9 @@ public class Connection extends Thread {
 	private PrintWriter outwriter;
 	private boolean open = false;
 	private Socket socket;
-	private boolean term=false;
+	private boolean term = false;
+
+	private int type = 0;   // 0 - undefined, 1 - with a server, 2 - with a client
 	
 	Connection(Socket socket) throws IOException{
 		in = new DataInputStream(socket.getInputStream());
@@ -39,7 +41,7 @@ public class Connection extends Thread {
 	 * returns true if the message was written, otherwise false
 	 */
 	public boolean writeMsg(String msg) {
-		if(open){
+		if (open) {
 			outwriter.println(msg);
 			outwriter.flush();
 			return true;	
@@ -47,35 +49,35 @@ public class Connection extends Thread {
 		return false;
 	}
 	
-	public void closeCon(){
-		if(open){
-			log.info("closing connection "+Settings.socketAddress(socket));
+	public void closeCon() {
+		if (open) {
+			log.info("closing connection " + Settings.socketAddress(socket));
 			try {
-				term=true;
+				term = true;
 				inreader.close();
 				out.close();
 			} catch (IOException e) {
 				// already closed?
-				log.error("received exception closing the connection "+Settings.socketAddress(socket)+": "+e);
+				log.error("received exception closing the connection " + Settings.socketAddress(socket) + ": " + e);
 			}
 		}
 	}
 	
 	
-	public void run(){
+	public void run() {
 		try {
 			String data;
-			while(!term && (data = inreader.readLine())!=null){
-				term=Control.getInstance().process(this,data);
+			while (!term && (data = inreader.readLine()) != null) {
+				term = Control.getInstance().process(this, data);
 			}
-			log.debug("connection closed to "+Settings.socketAddress(socket));
+			log.debug("connection closed to " + Settings.socketAddress(socket));
 			Control.getInstance().connectionClosed(this);
 			in.close();
 		} catch (IOException e) {
-			log.error("connection "+Settings.socketAddress(socket)+" closed with exception: "+e);
+			log.error("connection " + Settings.socketAddress(socket) + " closed with exception: " + e);
 			Control.getInstance().connectionClosed(this);
 		}
-		open=false;
+		open = false;
 	}
 	
 	public Socket getSocket() {
@@ -85,4 +87,12 @@ public class Connection extends Thread {
 	public boolean isOpen() {
 		return open;
 	}
+
+	public int getType() {
+	    return type;
+    }
+
+    public void setType(int type) {
+	    this.type = type;
+    }
 }

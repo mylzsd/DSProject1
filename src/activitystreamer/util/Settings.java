@@ -38,7 +38,7 @@ public class Settings {
 
 	public static void setRemotePort(int remotePort) {
 		if (remotePort < 0 || remotePort > 65535) {
-			log.error("supplied port "+remotePort+" is out of range, using "+getRemotePort());
+			log.error("supplied port "+remotePort+" is out of range, using " + getRemotePort());
 		}
 		else {
 			Settings.remotePort = remotePort;

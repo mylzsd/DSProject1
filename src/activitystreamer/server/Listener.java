@@ -23,8 +23,8 @@ public class Listener extends Thread{
 	
 	@Override
 	public void run() {
-		log.info("listening for new connections on "+portnum);
-		while(!term){
+		log.info("listening for new connections on " + portnum);
+		while (!term) {
 			Socket clientSocket;
 			try {
 				clientSocket = serverSocket.accept();
@@ -38,7 +38,7 @@ public class Listener extends Thread{
 
 	public void setTerm(boolean term) {
 		this.term = term;
-		if(term) interrupt();
+		if (term) interrupt();
 	}
 	
 	
