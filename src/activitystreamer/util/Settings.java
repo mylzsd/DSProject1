@@ -96,9 +96,5 @@ public class Settings {
 
 	public static String nextSecret() {
 	    return new BigInteger(130, random).toString(32);
-	 }
-
-
-
-	
+	}
 }

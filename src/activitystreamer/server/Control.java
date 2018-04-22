@@ -3,6 +3,8 @@ package activitystreamer.server;
 import java.io.IOException;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -20,9 +22,11 @@ public class Control extends Thread {
     private JSONParser parser = new JSONParser();
 	
 	protected static Control control = null;
+
+	private Map<String, String> userInfo = new HashMap<>();
 	
 	public static Control getInstance() {
-		if(control == null){
+		if (control == null) {
 			control = new Control();
 		} 
 		return control;
@@ -44,7 +48,8 @@ public class Control extends Thread {
 		// make a connection to another server if remote hostname is supplied
 		if (Settings.getRemoteHostname() != null) {
 			try {
-				outgoingConnection(new Socket(Settings.getRemoteHostname(), Settings.getRemotePort()));
+				Connection c = outgoingConnection(new Socket(Settings.getRemoteHostname(), Settings.getRemotePort()));
+				// Send authentication to remote host
 			} catch (IOException e) {
 				log.error("failed to make connection to " + Settings.getRemoteHostname() + ":" + Settings.getRemotePort() + " :" + e);
 				System.exit(-1);
@@ -57,9 +62,8 @@ public class Control extends Thread {
 	 * Return true if the connection should close.
 	 */
 	public synchronized boolean process(Connection con, String msg) {
-	    JSONObject requestObj;
+	    JSONObject requestObj, responseObj = new JSONObject();
 	    String command;
-	    JSONObject responseObj = new JSONObject();
         responseObj.put("command", "INVALID_MESSAGE");
 	    try {
 	        requestObj = (JSONObject) parser.parse(msg);
@@ -80,6 +84,10 @@ public class Control extends Thread {
         switch (command) {
 	        // Server communication part
             case "AUTHENTICATE":
+                return authenticate(con, requestObj);
+            case "AUTHENTICATION_FAIL":
+                break;
+            case "INVALID_MESSAGE":
                 break;
             case "SERVER_ANNOUNCE":
                 break;
@@ -105,6 +113,34 @@ public class Control extends Thread {
         }
 		return false;
 	}
+
+	private boolean authenticate(Connection con, JSONObject obj) {
+	    JSONObject responseObj = new JSONObject();
+        responseObj.put("command", "INVALID_MESSAGE");
+        if (con.getType() == 2) {
+            log.error("received AUTHENTICATION from a client");
+            responseObj.put("info", "Client should not send authentication request");
+        }
+        if (con.getType() == 1) {
+            log.error("AUTHENTICATION is not the first message from this server");
+            responseObj.put("info", "Authentication should be the first message");
+        }
+        String secret = (String) obj.get("secret");
+        if (secret == null) {
+            log.error("the received message does not contain a secret");
+            responseObj.put("info", "the received message does not contain a secret");
+        }
+        if (!secret.equals(Settings.getSecret())) {
+            log.error("the received message contains a wrong secret");
+            responseObj.put("info", "the received message contains a wrong secret");
+        }
+        else {
+            con.setType(1);
+            return false;
+        }
+        con.writeMsg(responseObj.toString());
+        return true;
+    }
 	
 	/*
 	 * The connection has been closed by the other party.
@@ -151,7 +187,6 @@ public class Control extends Thread {
 				log.debug("doing activity");
 				term = doActivity();
 			}
-			
 		}
 		log.info("closing " + connections.size() + " connections");
 		// clean up
