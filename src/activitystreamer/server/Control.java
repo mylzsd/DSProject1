@@ -76,7 +76,7 @@ public class Control extends Thread {
             }
         } catch (ParseException e) {
             log.error("JSON parse error while parsing message");
-            responseObj.put("info", "JSON parse error while parsing message");
+            responseObj.put("info", "the message sent was not a valid json object");
             con.writeMsg(responseObj.toString());
             return true;
         }
@@ -86,9 +86,11 @@ public class Control extends Thread {
             case "AUTHENTICATE":
                 return authenticate(con, requestObj);
             case "AUTHENTICATION_FAIL":
-                break;
+                log.error(String.format("Failed to AUTHENTICATE, info from server: %s", requestObj.get("info")));
+                return true;
             case "INVALID_MESSAGE":
-                break;
+                log.error(String.format("An invalid message is sent, info from another party: %s", requestObj.get("info")));
+                return true;
             case "SERVER_ANNOUNCE":
                 break;
             case "ACTIVITY_BROADCAST":
@@ -126,13 +128,9 @@ public class Control extends Thread {
             responseObj.put("info", "Authentication should be the first message");
         }
         String secret = (String) obj.get("secret");
-        if (secret == null) {
-            log.error("the received message does not contain a secret");
-            responseObj.put("info", "the received message does not contain a secret");
-        }
-        if (!secret.equals(Settings.getSecret())) {
-            log.error("the received message contains a wrong secret");
-            responseObj.put("info", "the received message contains a wrong secret");
+        if (secret == null || !secret.equals(Settings.getSecret())) {
+            log.error("the supplied secret is incorrect");
+            responseObj.put("info", String.format("the supplied secret is incorrect: %s", secret == null ? "" : secret));
         }
         else {
             con.setType(1);
@@ -141,7 +139,7 @@ public class Control extends Thread {
         con.writeMsg(responseObj.toString());
         return true;
     }
-	
+
 	/*
 	 * The connection has been closed by the other party.
 	 */

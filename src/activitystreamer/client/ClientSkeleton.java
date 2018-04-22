@@ -1,12 +1,10 @@
 package activitystreamer.client;
 
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
 import java.net.Socket;
 
@@ -26,217 +24,221 @@ public class ClientSkeleton extends Thread {
 
 	private Socket socket = null;
     private BufferedReader in = null;
-    private BufferedWriter out = null;
+    private PrintWriter out = null;
     private JSONParser parser = new JSONParser();
-    private boolean loginSuccess = false;
+    private boolean term = false;
+    private boolean open = false;
+    private int redirectCount = 0;
 	
 	public static ClientSkeleton getInstance() {
-		if (clientSolution==null) {
+		if (clientSolution == null) {
 			clientSolution = new ClientSkeleton();
 		}
 		return clientSolution;
 	}
 	
 	public ClientSkeleton() {
-        // Try register using given username and secret
-        int attemptCount = 1;
-        boolean registerSuccess = false;
-        while (!registerSuccess) {
-            if (attemptCount > MAX_ATTEMPT) {
-                log.fatal("Maximum attempts exceeded");
-                System.exit(-1);
-            }
-            log.info(String.format("Trying to register user to %s:%d, attempt %d",
-                    Settings.getRemoteHostname(), Settings.getRemotePort(), attemptCount++));
-            try {
-                JSONObject response = register();
-                String command = (String) response.get("command");
-                switch (command) {
-                    case "REGISTER_FAILED":
-                        log.info("User already registered, ready to login");
-                        registerSuccess = true;
-                        break;
-                    case "REGISTER_SUCCESS":
-                        log.info("Register success, ready to login");
-                        registerSuccess = true;
-                        break;
-                    case "INVALID_MESSAGE":
-                        log.error("Request format error");
-                        break;
-                    default:
-                        log.error("Command not found in response");
-                }
-                if (!command.equals("REGISTER_SUCCESS")) socket.close();
-            } catch (Exception e) {
-
-            }
+        setupConnection();
+	    if (Settings.getSecret() == null) {
+            // register with new secret
+            String secret = Settings.nextSecret();
+            System.out.println(String.format("Your new secret is %s", secret));
+            Settings.setSecret(secret);
+	        register();
         }
-        /*
-            Try login
-            if (LOGIN_SUCCESS) start listening or broadcasting
-            else if REDIRECT setup new parameters and retry login
-            else if (LOGIN_FAILED) log fatal and exit
-            else if INVALID_MESSAGE log error
-        */
-        attemptCount = 1;
-        while (!loginSuccess) {
-            if (attemptCount > MAX_ATTEMPT) {
-                log.fatal("Maximum attempts exceeded");
-                System.exit(-1);
-            }
-            log.info(String.format("Trying to login user to %s:%d, attempt %d",
-                    Settings.getRemoteHostname(), Settings.getRemotePort(), attemptCount++));
-            try {
-                JSONObject response = login();
-                String command = (String) response.get("command");
-                switch (command) {
-                    case "LOGIN_SUCCESS":
-                        log.info("Login success!!");
-                        if (in.ready()) {
-                            response = (JSONObject) parser.parse(in.readLine());
-                            if (response != null) {
-                                String cmd = (String) response.get("command");
-                                if (cmd.equals("REDIRECT")) {
-                                    if (response.containsKey("hostname") && response.containsKey("port")) {
-                                        Settings.setRemoteHostname((String) response.get("hostname"));
-                                        Settings.setRemotePort(((Long) response.get("port")).intValue());
-                                        socket.close();
-                                        attemptCount = 1;
-                                    }
-                                }
-                            }
-                        }
-                        else {
-                            loginSuccess = true;
-                        }
-                        break;
-                    case "REDIRECT":
-                        if (response.containsKey("hostname") && response.containsKey("port")) {
-                            Settings.setRemoteHostname((String) response.get("hostname"));
-                            Settings.setRemotePort((int) response.get("port"));
-                            attemptCount = 1;
-                        }
-                        else {
-                            log.error("Cannot find hostname or port in response");
-                        }
-                        break;
-                    case "LOGIN_FAILED":
-                        log.fatal((String) response.get("info"));
-                        System.exit(-1);
-                        break;
-                    case "INVALID_MESSAGE":
-                        log.error("Request format incorrect");
-                        break;
-                    default:
-                        log.error("Command not found in response");
-                }
-                if (!command.equals("LOGIN_SUCCESS")) socket.close();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+        else {
+            // login with whatever in Settings
+            login();
         }
-
+        // start GUI and listener
         textFrame = new TextFrame();
 		start();
 	}
-	
-	private void setupConnection() throws IOException {
-	    try {
-            socket = new Socket(Settings.getRemoteHostname(), Settings.getRemotePort());
-        } catch (IllegalArgumentException e) {
-	        log.fatal("Illegal port number is used");
-	        System.exit(-1);
-        } catch (NullPointerException e) {
-            log.fatal("Host address cannot be empty");
-            System.exit(-1);
-        }
-        in = new BufferedReader(new InputStreamReader(socket.getInputStream(), "UTF-8"));
-        out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), "UTF-8"));
-    }
-	
-	public JSONObject register() throws IOException, ParseException {
-	    if (socket == null || socket.isClosed())
-	        setupConnection();
-		JSONObject requestObj = new JSONObject();
-        requestObj.put("command", "REGISTER");
-        requestObj.put("username", Settings.getUsername());
-        requestObj.put("secret", Settings.getSecret());
-        String request = requestObj.toString() + "\n";
 
-        String response = send(request, true);
-        JSONObject ret = (JSONObject) parser.parse(response);
-        return ret;
-    }
-
-    public JSONObject login() throws IOException, ParseException {
-        if (socket == null || socket.isClosed())
-            setupConnection();
-        JSONObject user = new JSONObject();
-        user.put("command", "LOGIN");
-        user.put("username", Settings.getUsername());
-        user.put("secret", Settings.getSecret());
-        String string = user.toString() + "\n";
-        String response = send(string, true);
-        JSONObject result = (JSONObject) parser.parse(response);
-        return result;
-    }
-
-	public void sendActivityObject(JSONObject activityObj) {
-	    if (socket.isClosed()) {
-	        log.error("Connection closed.");
-	        return;
+    public void sendActivityObject(JSONObject activityObj) {
+        if (!open) {
+            log.error("Connection closed");
+            return;
         }
         JSONObject requestObj = new JSONObject();
         requestObj.put("command", "ACTIVITY_MESSAGE");
         requestObj.put("username", Settings.getUsername());
         requestObj.put("secret", Settings.getSecret());
         requestObj.put("activity", activityObj);
-        String request = requestObj.toString() + "\n";
-        try {
-            send(request, false);
-        } catch (IOException e) {
-            log.error("Failed to send activity message");
-        }
-	}
-	
-	
-	public void disconnect() {
-	    if (!socket.isClosed()) {
-            loginSuccess = false;
-            try {
-                JSONObject requestObj = new JSONObject();
-                requestObj.put("command", "LOGOUT");
-                String request = requestObj.toString() + "\n";
-                send(request, false);
-                socket.close();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-	}
+        send(requestObj.toString());
+    }
 
-	private String send(String request, boolean response) throws IOException {
-        out.write(request);
-        out.flush();
-        if (response)
-            return in.readLine();
-        return null;
+
+    public void disconnect() {
+	    term = true;
+        if (open) logout();
+        try {
+            closeConnection();
+        } catch (IOException e) {
+            log.error("received exception when closing the connection: " + e);
+        }
+    }
+	
+	private void setupConnection() {
+	    try {
+            socket = new Socket(Settings.getRemoteHostname(), Settings.getRemotePort());
+            in = new BufferedReader(new InputStreamReader(new DataInputStream(socket.getInputStream())));
+            out = new PrintWriter(new DataOutputStream(socket.getOutputStream()), true);
+            open = true;
+        } catch (IllegalArgumentException e) {
+	        log.fatal("Illegal port number is used");
+	        System.exit(-1);
+        } catch (NullPointerException e) {
+            log.fatal("Host address cannot be empty");
+            System.exit(-1);
+        } catch (IOException e) {
+	        log.fatal("Failed to establish connection with server");
+	        System.exit(-1);
+        }
+    }
+
+    private void closeConnection() throws IOException {
+	    if (open) {
+            log.info("closing connection with server...");
+            in.close();
+            out.close();
+            socket.close();
+            open = false;
+        }
+    }
+
+    private void register() {
+        JSONObject outObj = new JSONObject();
+        outObj.put("command", "REGISTER");
+        outObj.put("username", Settings.getUsername());
+        outObj.put("secret", Settings.getSecret());
+        send(outObj.toString());
+    }
+
+    private void login() {
+        JSONObject outObj = new JSONObject();
+        outObj.put("command", "LOGIN");
+        outObj.put("username", Settings.getUsername());
+        outObj.put("secret", Settings.getSecret());
+        send(outObj.toString());
+    }
+
+    private void logout() {
+        JSONObject outObj = new JSONObject();
+        outObj.put("command", "LOGOUT");
+        send(outObj.toString());
+    }
+
+    private boolean redirect(JSONObject obj) {
+	    if (redirectCount++ >= MAX_ATTEMPT) {
+	        log.fatal("Maximum redirect count exceeded");
+	        return true;
+        }
+        String hostname = (String) obj.get("hostname");
+	    Long port = (Long) obj.get("port");
+        if (hostname == null) {
+            log.fatal("Received message does not contain a hostname");
+            invalidMessage("received message does not contain a hostname");
+            return true;
+        }
+        if (port == null) {
+            log.fatal("Received message does not contain a port");
+            invalidMessage("received message does not contain a port");
+            return true;
+        }
+        try {
+            closeConnection();
+        } catch (IOException e) {
+            log.error("received exception when closing the connection: " + e);
+            return true;
+        }
+        setupConnection();
+        login();
+	    return false;
+    }
+
+	private void invalidMessage(String info) {
+	    JSONObject outObj = new JSONObject();
+        outObj.put("command", "INVALID_MESSAGE");
+        outObj.put("info", info);
+	    send(outObj.toString());
+    }
+
+	private boolean send(String msg) {
+	    if (open) {
+            out.println(msg);
+            out.flush();
+            return true;
+        }
+        return false;
+    }
+
+    private boolean process(String msg) {
+        JSONObject inObj;
+        String command;
+        try {
+            inObj = (JSONObject) parser.parse(msg);
+            command = (String) inObj.get("command");
+            if (command == null) {
+                log.error("the received message did not contain a command");
+                invalidMessage("the received message did not contain a command");
+                return true;
+            }
+        } catch (ParseException e) {
+            log.error("JSON parse error while parsing message");
+            invalidMessage("the message sent was not a valid json object");
+            return true;
+        }
+
+        switch (command) {
+            case "INVALID_MESSAGE":
+                log.error(String.format("An invalid message is sent, info from another party: %s", inObj.get("info")));
+                return true;
+            case "REGISTER_SUCCESS":
+                log.info("Register success");
+                login();
+                return false;
+            case "REGISTER_FAILED":
+                log.info("User already exist");
+                setupConnection();
+                login();
+                return false;
+            case "LOGIN_SUCCESS":
+                log.info("Login success");
+                return false;
+            case "REDIRECT":
+                log.info("Redirect");
+                return redirect(inObj);
+            case "LOGIN_FAILED":
+                log.fatal((String) inObj.get("info"));
+                return true;
+            case "ACTIVITY_BROADCAST":
+                log.info("Activity received");
+                JSONObject activity = (JSONObject) inObj.get("activity");
+                if (activity == null) {
+                    log.error("Received message does not contain an activity");
+                    invalidMessage("message does not contain an activity");
+                    return true;
+                }
+                textFrame.setOutputText(activity);
+                return false;
+            default:
+                log.error("the received message contains a invalid command");
+                invalidMessage("the received message contains a invalid command");
+                return true;
+        }
     }
 	
 	public void run() {
-        while (loginSuccess) {
-            try {
-                String response = in.readLine();
-                if (response != null) {
-                    // System.out.println("reading: " + response);
-                    JSONObject responseObj = (JSONObject) parser.parse(response);
-                    String command = (String) responseObj.get("command");
-                    if (command.equals("ACTIVITY_BROADCAST"))
-                        textFrame.setOutputText((JSONObject) responseObj.get("activity"));
-                }
-            } catch (Exception e) {
-                // e.printStackTrace();
+        try {
+            String response;
+            while (!term && (response = in.readLine()) != null) {
+                term = process(response);
             }
+            log.debug("stop receiving message from server");
+            socket.close();
+        } catch (IOException e) {
+            log.error("exit with exception: " + e);
         }
 	}
 }

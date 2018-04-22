@@ -27,7 +27,7 @@ public class Connection extends Thread {
 
 	private int type = 0;   // 0 - undefined, 1 - with a server, 2 - with a client
 	
-	Connection(Socket socket) throws IOException{
+	Connection(Socket socket) throws IOException {
 		in = new DataInputStream(socket.getInputStream());
 	    out = new DataOutputStream(socket.getOutputStream());
 	    inreader = new BufferedReader( new InputStreamReader(in));
