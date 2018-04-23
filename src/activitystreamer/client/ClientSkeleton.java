@@ -199,10 +199,8 @@ public class ClientSkeleton extends Thread {
                 login();
                 return false;
             case "REGISTER_FAILED":
-                log.info("User already exist");
-                setupConnection();
-                login();
-                return false;
+                log.fatal("Register failed: %s", inObj.get("info"));
+                return true;
             case "LOGIN_SUCCESS":
                 log.info("Login success");
                 return false;
@@ -240,5 +238,6 @@ public class ClientSkeleton extends Thread {
         } catch (IOException e) {
             log.error("exit with exception: " + e);
         }
+        System.exit(0);
 	}
 }
