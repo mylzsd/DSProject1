@@ -89,7 +89,7 @@ public class TextFrame extends JFrame implements ActionListener {
 		Gson gson = new GsonBuilder().setPrettyPrinting().create();
 		JsonParser jp = new JsonParser();
 		JsonElement je = jp.parse(obj.toJSONString());
-		String prettyJsonString = gson.toJson(je);
+		String prettyJsonString = gson.toJson(je) + '\n';
         // outputText.setText(prettyJsonString);
         outputText.append(prettyJsonString);
 		outputText.revalidate();

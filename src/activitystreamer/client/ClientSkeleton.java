@@ -199,7 +199,7 @@ public class ClientSkeleton extends Thread {
                 login();
                 return false;
             case "REGISTER_FAILED":
-                log.fatal("Register failed: %s", inObj.get("info"));
+                log.fatal(String.format("Register failed: %s", inObj.get("info")));
                 return true;
             case "LOGIN_SUCCESS":
                 log.info("Login success");
