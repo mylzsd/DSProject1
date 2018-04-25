@@ -15,6 +15,7 @@ import org.json.simple.parser.ParseException;
 import activitystreamer.util.Settings;
 
 public class Control extends Thread {
+    private static final String id = Settings.nextSecret();
 	private static final Logger log = LogManager.getLogger();
 	private static ArrayList<Connection> connections;
 	private static boolean term = false;
@@ -356,6 +357,17 @@ public class Control extends Thread {
 	}
 	
 	public boolean doActivity() {
+	    JSONObject outObj = new JSONObject();
+	    outObj.put("command", "SERVER_ANNOUNCE");
+	    outObj.put("id", id);
+	    outObj.put("load", connections.size());
+	    outObj.put("hostname", Settings.getLocalHostname());
+	    outObj.put("port", Settings.getLocalPort());
+	    for (Connection c : connections) {
+	        if (c.getType() == 1) {
+	            c.writeMsg(outObj.toString());
+            }
+        }
 		return false;
 	}
 	
