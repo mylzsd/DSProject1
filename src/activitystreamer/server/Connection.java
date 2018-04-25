@@ -26,6 +26,7 @@ public class Connection extends Thread {
 	private boolean term = false;
 
 	private int type = 0;   // 0 - undefined, 1 - with a server, 2 - with a client
+	private boolean login = false;
 	
 	Connection(Socket socket) throws IOException {
 		in = new DataInputStream(socket.getInputStream());
@@ -95,4 +96,12 @@ public class Connection extends Thread {
     public void setType(int type) {
 	    this.type = type;
     }
+
+    public boolean getLogin() {
+		return login;
+	}
+
+	public void setLogin(boolean login) {
+		this.login = login;
+	}
 }

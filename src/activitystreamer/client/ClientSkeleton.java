@@ -152,6 +152,8 @@ public class ClientSkeleton extends Thread {
             log.error("received exception when closing the connection: " + e);
             return true;
         }
+        Settings.setRemoteHostname(hostname);
+        Settings.setRemotePort(port.intValue());
         setupConnection();
         login();
 	    return false;
