@@ -38,6 +38,8 @@ public class Control extends Thread {
         }
     }
     private Map<String, ServerInfo> serverInfo = new HashMap<>();
+	private Map<String, Integer> lockMap = new HashMap<>();
+	private Map<String, Connection> connectionMap = new HashMap<>();
 	
 	public static Control getInstance() {
 		if (control == null) {
@@ -112,10 +114,14 @@ public class Control extends Thread {
             case "ACTIVITY_BROADCAST":
                 return activityBroadcast(con, requestObj);
             case "LOCK_REQUEST":
-                break;
+                return lockRequest(con, requestObj);
+            case "LOCK_ALLOWED":
+                return lockAllowed(con, requestObj);
+            case "LOCK_DENIED":
+                return lockDenied(con, requestObj);
             // Client part
             case "REGISTER":
-                break;
+                return register(con, requestObj);
             case "LOGIN":
                 return login(con, requestObj);
             case "LOGOUT":
@@ -129,7 +135,6 @@ public class Control extends Thread {
                 invalidMessage(con, "the received message contains a invalid command");
                 return true;
         }
-		return false;
 	}
 
 	private void invalidMessage(Connection con, String info) {
@@ -191,25 +196,219 @@ public class Control extends Thread {
             return true;
         }
         for (Connection c : connections) {
-            if (c == con) continue;
+            if (c.equals(con)) continue;
             c.writeMsg(obj.toString());
         }
         return false;
     }
 
+    private boolean lockRequest(Connection con, JSONObject obj) {
+	    if (con.getType() != 1) {
+	        log.error("received LOCK_REQUEST from a non-server party");
+	        invalidMessage(con, "received LOCK_REQUEST from a non-server party");
+	        return true;
+        }
+        JSONObject responseObj = new JSONObject();
+        String username = (String) obj.get("username");
+	    String secret = (String) obj.get("secret");
+	    int verify = userVerify(username, secret);
+	    switch (verify) {
+            case 1:
+                invalidMessage(con, "the message must contain non-null key username");
+                return true;
+            case 2:
+                invalidMessage(con, "the message must contain non-null key secret");
+                return true;
+            case 0:
+            case 4:
+                log.error("username is already registered");
+                responseObj.put("command", "LOCK_DENIED");
+                responseObj.put("username", username);
+                responseObj.put("secret", secret);
+                con.writeMsg(responseObj.toString());
+                return false;
+        }
+        // Store user's information regardless the result of lock request.
+        userInfo.put(username, secret);
+        // Send lock request to all server connections
+        JSONObject requestObj = new JSONObject();
+        requestObj.put("command", "LOCK_REQUEST");
+        requestObj.put("username", username);
+        requestObj.put("secret", secret);
+        int requestCount = 0;
+        for (Connection c : connections) {
+            if (c.getType() == 1 && !c.equals(con)) {
+                c.writeMsg(requestObj.toString());
+                requestCount++;
+            }
+        }
+        // If no lock request awaiting, lock allowed. Otherwise, store request count and connection map.
+        if (requestCount == 0) {
+            responseObj.put("command", "LOCK_ALLOWED");
+            responseObj.put("username", username);
+            responseObj.put("secret", secret);
+            con.writeMsg(responseObj.toString());
+        }
+        else {
+            lockMap.put(username, requestCount);
+            connectionMap.put(username, con);
+        }
+	    return false;
+    }
+
+    private boolean lockAllowed(Connection con, JSONObject obj) {
+	    if (con.getType() != 1) {
+	        log.error("received LOCK_ALLOWED from a non-server party");
+	        invalidMessage(con, "received LOCK_ALLOWED from a non-server party");
+	        return true;
+        }
+        JSONObject responseObj = new JSONObject();
+        String username = (String) obj.get("username");
+        String secret = (String) obj.get("secret");
+        int verify = userVerify(username, secret);
+        switch (verify) {
+            case 1:
+                invalidMessage(con, "the message must contain non-null key username");
+                return true;
+            case 2:
+                invalidMessage(con, "the message must contain non-null key secret");
+                return true;
+        }
+        // Return if a previous LOCK_DENIED is received
+        if (!lockMap.containsKey(username)) return false;
+        // Calculate the rest amount of awaiting request.
+        int requestCount = lockMap.get(username) - 1;
+        // If no more request awaiting, send lock allowed or register success. Other wise wait for others' reply.
+        if (requestCount == 0) {
+            lockMap.remove(username);
+            Connection c = connectionMap.remove(username);
+            // Send lock allowed to server, and register success to client.
+            if (c.getType() == 1) {
+                responseObj.put("command", "LOCK_ALLOWED");
+                responseObj.put("username", username);
+                responseObj.put("secret", secret);
+            }
+            else {
+                responseObj.put("command", "REGISTER_SUCCESS");
+                responseObj.put("info", String.format("register success for %s", username));
+            }
+            c.writeMsg(responseObj.toString());
+        }
+        else {
+            lockMap.put(username, requestCount);
+        }
+	    return false;
+    }
+
+    private boolean lockDenied(Connection con, JSONObject obj) {
+	    if (con.getType() != 1) {
+	        log.error("received LOCK_DENIED from a non-server party");
+	        invalidMessage(con, "received LOCK_DENIED from a non-server party");
+	        return true;
+        }
+        JSONObject responseObj = new JSONObject();
+        String username = (String) obj.get("username");
+        String secret = (String) obj.get("secret");
+        int verify = userVerify(username, secret);
+        switch (verify) {
+            case 1:
+                invalidMessage(con, "the message must contain non-null key username");
+                return true;
+            case 2:
+                invalidMessage(con, "the message must contain non-null key secret");
+                return true;
+        }
+        // Remove items from lock map and connection map.
+        lockMap.remove(username);
+        Connection c = connectionMap.remove(username);
+        // Send lock denied to server, and register failed to client.
+        if (c.getType() == 1) {
+            responseObj.put("command", "LOCK_DENIED");
+            responseObj.put("username", username);
+            responseObj.put("secret", secret);
+        }
+        else {
+            responseObj.put("command", "REGISTER_FAILED");
+            responseObj.put("info", String.format("%s is already registered with the system", username));
+        }
+        c.writeMsg(responseObj.toString());
+        // If this is a client connection, close it.
+        if (c.getType() == 2) c.closeCon();
+	    return false;
+    }
+
     private int userVerify(String username, String secret) {
-	    if (username == null) return 1;
+	    if (username == null) {
+            log.error("received message does not contain a username");
+	        return 1;
+        }
 	    if (username.equals("anonymous")) return 0;
-	    if (secret == null) return 2;
+	    if (secret == null) {
+            log.error("received message does not contain a secret");
+            return 2;
+        }
 	    if (!userInfo.containsKey(username)) return 3;
 	    if (!userInfo.get(username).equals(secret)) return 4;
 	    return 0;
     }
 
+    private boolean register(Connection con, JSONObject obj) {
+	    if (con.getType() == 1) {
+	        log.error("received REGISTER from a server");
+	        invalidMessage(con, "Server should not send REGISTER request");
+	        return true;
+        }
+        if (con.getType() == 0) con.setType(2);
+        JSONObject responseObj = new JSONObject();
+	    String username = (String) obj.get("username");
+        String secret = (String) obj.get("secret");
+        int verify = userVerify(username, secret);
+        switch (verify) {
+            case 1:
+                invalidMessage(con, "the message must contain non-null key username");
+                return true;
+            case 2:
+                invalidMessage(con, "the message must contain non-null key secret");
+                return true;
+            case 0:
+            case 4:
+                log.error("username is already registered");
+                responseObj.put("command", "REGISTER_FAILED");
+                responseObj.put("info", String.format("%s is already registered with the system", username));
+                con.writeMsg(responseObj.toString());
+                return true;
+        }
+        // Store user's information regardless the result of lock request.
+        userInfo.put(username, secret);
+        // Send lock request to all server connections
+        JSONObject requestObj = new JSONObject();
+        requestObj.put("command", "LOCK_REQUEST");
+        requestObj.put("username", username);
+        requestObj.put("secret", secret);
+        int requestCount = 0;
+        for (Connection c : connections) {
+            if (c.getType() == 1) {
+                c.writeMsg(requestObj.toString());
+                requestCount++;
+            }
+        }
+        // If no lock request awaiting, register success. Otherwise, store request count and connection map.
+        if (requestCount == 0) {
+            responseObj.put("command", "REGISTER_SUCCESS");
+            responseObj.put("info", String.format("register success for %s", username));
+            con.writeMsg(responseObj.toString());
+        }
+        else {
+            lockMap.put(username, requestCount);
+            connectionMap.put(username, con);
+        }
+	    return false;
+    }
+
     private boolean login(Connection con, JSONObject obj) {
 		if (con.getType() == 1) {
 			log.error("received LOGIN from a server");
-			invalidMessage(con, "Server should not send login request");
+			invalidMessage(con, "Server should not send LOGIN request");
 			return true;
 		}
 		if (con.getType() == 0) con.setType(2);
@@ -220,11 +419,9 @@ public class Control extends Thread {
 		switch (verify) {
             case 0: break;
             case 1:
-                log.error("received message does not contain a username");
                 invalidMessage(con, "the message must contain non-null key username");
                 return true;
             case 2:
-                log.error("received message does not contain a secret");
                 invalidMessage(con, "the message must contain non-null key secret");
                 return true;
             case 3:
@@ -271,11 +468,9 @@ public class Control extends Thread {
         switch (verify) {
             case 0: break;
             case 1:
-                log.error("received message does not contain a username");
                 invalidMessage(con, "the message must contain non-null key username");
                 return true;
             case 2:
-                log.error("received message does not contain a secret");
                 invalidMessage(con, "the message must contain non-null key secret");
                 return true;
             case 3:
@@ -317,7 +512,6 @@ public class Control extends Thread {
 		Connection c = new Connection(s);
 		connections.add(c);
 		return c;
-		
 	}
 	
 	/*
@@ -329,7 +523,6 @@ public class Control extends Thread {
 		c.setType(1);
 		connections.add(c);
 		return c;
-		
 	}
 	
 	@Override
