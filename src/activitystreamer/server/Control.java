@@ -24,7 +24,9 @@ public class Control extends Thread {
 	
 	protected static Control control = null;
 
+	// local database that store the username and secret
 	private Map<String, String> userInfo = new HashMap<>();
+	// server info class that store the content of server announce
 	class ServerInfo {
 	    String id;
 	    String hostname;
@@ -37,8 +39,11 @@ public class Control extends Thread {
 	        this.load = load;
         }
     }
+    // map server info with server id
     private Map<String, ServerInfo> serverInfo = new HashMap<>();
+	// map awaiting lock requests count with requested username
 	private Map<String, Integer> lockMap = new HashMap<>();
+	// map awaiting lock request connection with requested username
 	private Map<String, Connection> connectionMap = new HashMap<>();
 	
 	public static Control getInstance() {
@@ -54,11 +59,13 @@ public class Control extends Thread {
 		// start a listener
 		try {
 			listener = new Listener();
+			// build initial connection
 			initiateConnection();
 		} catch (IOException e1) {
 			log.fatal("failed to startup a listening thread: " + e1);
 			System.exit(-1);
 		}
+		// start server announce thread
 		start();
 	}
 	
@@ -72,6 +79,7 @@ public class Control extends Thread {
                 requestObj.put("command", "AUTHENTICATE");
                 requestObj.put("secret", Settings.getSecret());
                 con.writeMsg(requestObj.toString());
+                // server connection type
                 con.setType(1);
 			} catch (IOException e) {
 				log.error("failed to make connection to " + Settings.getRemoteHostname() + ":" + Settings.getRemotePort() + " :" + e);
@@ -79,13 +87,16 @@ public class Control extends Thread {
 			}
 		}
 	}
-	
-	/*
-	 * Processing incoming messages from the connection.
-	 * Return true if the connection should close.
-	 */
+
+    /**
+     * Processing incoming messages from the connection.
+     * @param con source connection
+     * @param msg message to be processed
+     * @return true if the connection should be closed, false otherwise.
+     */
 	public synchronized boolean process(Connection con, String msg) {
 	    JSONObject requestObj;
+	    // basic format check
 	    String command;
 	    try {
 	        requestObj = (JSONObject) parser.parse(msg);
@@ -100,7 +111,7 @@ public class Control extends Thread {
             invalidMessage(con, "the message sent was not a valid json object");
             return true;
         }
-
+        // process different commands
         switch (command) {
 	        // Server communication part
             case "AUTHENTICATE":
@@ -139,6 +150,11 @@ public class Control extends Thread {
         }
 	}
 
+    /**
+     * Build INVALID_MESSAGE JSON and send.
+     * @param con connection whom send to.
+     * @param info detailed information for INVALID_MESSAGE.
+     */
 	private void invalidMessage(Connection con, String info) {
         JSONObject outObj = new JSONObject();
         outObj.put("command", "INVALID_MESSAGE");
@@ -146,7 +162,14 @@ public class Control extends Thread {
         con.writeMsg(outObj.toString());
 	}
 
+    /**
+     * Process AUTHENTICATE request.
+     * @param con source connection,
+     * @param obj JSON object of message.
+     * @return true if connection should be closed.
+     */
 	private boolean authenticate(Connection con, JSONObject obj) {
+	    // Only connection type 0 (new connection) should send this message
         if (con.getType() == 2) {
             log.error("received AUTHENTICATION from a client");
             invalidMessage(con, "Client should not send authentication request");
@@ -167,6 +190,12 @@ public class Control extends Thread {
         return true;
     }
 
+    /**
+     * Process SERVER_ANNOUNCE request.
+     * @param con source connection,
+     * @param obj JSON object of message.
+     * @return true if connection should be closed.
+     */
     private boolean serverAnnounce(Connection con, JSONObject obj) {
         if (con.getType() != 1) {
             log.error("received SERVER_ANNOUNCE from a non-server party");
@@ -181,7 +210,7 @@ public class Control extends Thread {
             log.error("some fields are missing");
             invalidMessage(con, "some fields are missing");
         }
-        System.out.println(obj.toString());
+        // update values in serverInfo map
         ServerInfo si = serverInfo.getOrDefault(id, new ServerInfo(id, hostname, port.longValue(), load.longValue()));
         if (!si.hostname.equals(hostname) || !(si.port == port.longValue())) {
             log.error("new information does not match with old one");
@@ -193,12 +222,19 @@ public class Control extends Thread {
         return false;
     }
 
+    /**
+     * Process ACTIVITY_BROADCAST request.
+     * @param con source connection,
+     * @param obj JSON object of message.
+     * @return true if connection should be closed.
+     */
     private boolean activityBroadcast(Connection con, JSONObject obj) {
         if (con.getType() != 1) {
             log.error("received ACTIVITY_BROADCAST from a non-server party");
             invalidMessage(con, "received SERVER_ANNOUNCE from an unauthenticated server");
             return true;
         }
+        // broadcast to all connection, including servers and clients except source, if the message is correct
         for (Connection c : connections) {
             if (c.equals(con)) continue;
             c.writeMsg(obj.toString());
@@ -206,6 +242,37 @@ public class Control extends Thread {
         return false;
     }
 
+    /**
+     * Verify the username and secret. Helper function for lock, register, login, and activity.
+     * @param username
+     * @param secret
+     * @return 1 if username is null,
+     *         2 if secret is null,
+     *         3 if username is not found in local database,
+     *         4 if username is found but secret does not match,
+     *         0 if username and secret match or username is "anonymous".
+     */
+    private int userVerify(String username, String secret) {
+        if (username == null) {
+            log.error("received message does not contain a username");
+            return 1;
+        }
+        if (username.equals("anonymous")) return 0;
+        if (secret == null) {
+            log.error("received message does not contain a secret");
+            return 2;
+        }
+        if (!userInfo.containsKey(username)) return 3;
+        if (!userInfo.get(username).equals(secret)) return 4;
+        return 0;
+    }
+
+    /**
+     * Process LOCK_REQUEST request.
+     * @param con source connection,
+     * @param obj JSON object of message.
+     * @return true if connection should be closed.
+     */
     private boolean lockRequest(Connection con, JSONObject obj) {
 	    if (con.getType() != 1) {
 	        log.error("received LOCK_REQUEST from a non-server party");
@@ -260,6 +327,12 @@ public class Control extends Thread {
 	    return false;
     }
 
+    /**
+     * Process LOCK_ALLOWED request.
+     * @param con source connection,
+     * @param obj JSON object of message.
+     * @return true if connection should be closed.
+     */
     private boolean lockAllowed(Connection con, JSONObject obj) {
 	    if (con.getType() != 1) {
 	        log.error("received LOCK_ALLOWED from a non-server party");
@@ -304,6 +377,12 @@ public class Control extends Thread {
 	    return false;
     }
 
+    /**
+     * Process LOCK_DENIED request.
+     * @param con source connection,
+     * @param obj JSON object of message.
+     * @return true if connection should be closed.
+     */
     private boolean lockDenied(Connection con, JSONObject obj) {
 	    if (con.getType() != 1) {
 	        log.error("received LOCK_DENIED from a non-server party");
@@ -341,21 +420,12 @@ public class Control extends Thread {
 	    return false;
     }
 
-    private int userVerify(String username, String secret) {
-	    if (username == null) {
-            log.error("received message does not contain a username");
-	        return 1;
-        }
-	    if (username.equals("anonymous")) return 0;
-	    if (secret == null) {
-            log.error("received message does not contain a secret");
-            return 2;
-        }
-	    if (!userInfo.containsKey(username)) return 3;
-	    if (!userInfo.get(username).equals(secret)) return 4;
-	    return 0;
-    }
-
+    /**
+     * Process REGISTER request.
+     * @param con source connection,
+     * @param obj JSON object of message.
+     * @return true if connection should be closed.
+     */
     private boolean register(Connection con, JSONObject obj) {
 	    if (con.getType() == 1) {
 	        log.error("received REGISTER from a server");
@@ -409,6 +479,12 @@ public class Control extends Thread {
 	    return false;
     }
 
+    /**
+     * Process LOGIN request.
+     * @param con source connection,
+     * @param obj JSON object of message.
+     * @return true if connection should be closed.
+     */
     private boolean login(Connection con, JSONObject obj) {
 		if (con.getType() == 1) {
 			log.error("received LOGIN from a server");
@@ -441,6 +517,7 @@ public class Control extends Thread {
                 con.writeMsg(responseObj.toString());
                 return true;
         }
+        // login allowed
         responseObj.put("command", "LOGIN_SUCCESS");
         responseObj.put("info", String.format("logged in as user %s", username));
         con.writeMsg(responseObj.toString());
@@ -456,10 +533,17 @@ public class Control extends Thread {
                 return true;
             }
         }
+        // set login flag
         con.setLogin(true);
         return false;
 	}
 
+    /**
+     * Process ACTIVITY_MESSAGE request.
+     * @param con source connection,
+     * @param obj JSON object of message.
+     * @return true if connection should be closed.
+     */
 	private boolean activityMessage(Connection con, JSONObject obj) {
         JSONObject responseObj = new JSONObject();
 	    if (con.getType() != 2) {
@@ -487,6 +571,7 @@ public class Control extends Thread {
                 con.writeMsg(responseObj.toString());
                 return true;
         }
+        // check if this user logged in
         if (!con.getLogin()) {
             log.error("user has not logged in");
             responseObj.put("command", "AUTHENTICATION_FAIL");
@@ -494,6 +579,7 @@ public class Control extends Thread {
             con.writeMsg(responseObj.toString());
             return true;
         }
+        // build ACTIVITY_BROADCAST JSON and send to all server and client connections
         activity.put("authenticated_user", username);
         responseObj.put("command", "ACTIVITY_BROADCAST");
         responseObj.put("activity", activity);
@@ -556,6 +642,7 @@ public class Control extends Thread {
 	}
 	
 	public boolean doActivity() {
+	    // wrap up current server info and send to server connections
 	    JSONObject outObj = new JSONObject();
 	    outObj.put("command", "SERVER_ANNOUNCE");
 	    outObj.put("id", id);

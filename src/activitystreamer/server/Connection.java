@@ -25,7 +25,9 @@ public class Connection extends Thread {
 	private Socket socket;
 	private boolean term = false;
 
-	private int type = 0;   // 0 - undefined, 1 - with a server, 2 - with a client
+	// Type of connection, 0 - undefined, 1 - with a server, 2 - with a client
+	private int type = 0;
+	// Whether this user logged in
 	private boolean login = false;
 	
 	Connection(Socket socket) throws IOException {
