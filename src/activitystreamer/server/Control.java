@@ -58,7 +58,8 @@ public class Control extends Thread {
 		} catch (IOException e1) {
 			log.fatal("failed to startup a listening thread: " + e1);
 			System.exit(-1);
-		}	
+		}
+		start();
 	}
 	
 	public void initiateConnection() {
@@ -84,7 +85,6 @@ public class Control extends Thread {
 	 * Return true if the connection should close.
 	 */
 	public synchronized boolean process(Connection con, String msg) {
-        System.out.println(msg);
 	    JSONObject requestObj;
 	    String command;
 	    try {
@@ -181,6 +181,7 @@ public class Control extends Thread {
             log.error("some fields are missing");
             invalidMessage(con, "some fields are missing");
         }
+        System.out.println(obj.toString());
         ServerInfo si = serverInfo.getOrDefault(id, new ServerInfo(id, hostname, port.longValue(), load.longValue()));
         if (!si.hostname.equals(hostname) || !(si.port == port.longValue())) {
             log.error("new information does not match with old one");
@@ -188,6 +189,7 @@ public class Control extends Thread {
             return true;
         }
         si.load = load.longValue();
+        serverInfo.put(id, si);
         return false;
     }
 
@@ -444,7 +446,8 @@ public class Control extends Thread {
         con.writeMsg(responseObj.toString());
         // check other servers' load and redirect
         for (ServerInfo si : serverInfo.values()) {
-            if (si.load < connections.size() - 2) {
+            int load = (int) si.load;
+            if (load <= connections.size() - 2) {
                 responseObj.clear();
                 responseObj.put("command", "REDIRECT");
                 responseObj.put("hostname", si.hostname);
