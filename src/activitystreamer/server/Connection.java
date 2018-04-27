@@ -45,7 +45,7 @@ public class Connection extends Thread {
 		if (open) {
 			outwriter.println(msg);
 			outwriter.flush();
-			return true;	
+			return true;
 		}
 		return false;
 	}

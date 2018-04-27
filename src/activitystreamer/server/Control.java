@@ -71,6 +71,7 @@ public class Control extends Thread {
                 requestObj.put("command", "AUTHENTICATE");
                 requestObj.put("secret", Settings.getSecret());
                 con.writeMsg(requestObj.toString());
+                con.setType(1);
 			} catch (IOException e) {
 				log.error("failed to make connection to " + Settings.getRemoteHostname() + ":" + Settings.getRemotePort() + " :" + e);
 				System.exit(-1);
@@ -83,6 +84,7 @@ public class Control extends Thread {
 	 * Return true if the connection should close.
 	 */
 	public synchronized boolean process(Connection con, String msg) {
+        System.out.println(msg);
 	    JSONObject requestObj;
 	    String command;
 	    try {
@@ -104,10 +106,10 @@ public class Control extends Thread {
             case "AUTHENTICATE":
                 return authenticate(con, requestObj);
             case "AUTHENTICATION_FAIL":
-                log.error(String.format("Failed to AUTHENTICATE, info from server: %s", requestObj.get("info")));
+                log.error(String.format("AUTHENTICATION_FAIL, %s", requestObj.get("info")));
                 return true;
             case "INVALID_MESSAGE":
-                log.error(String.format("An invalid message is sent, info from another party: %s", requestObj.get("info")));
+                log.error(String.format("An invalid message is sent, %s", requestObj.get("info")));
                 return true;
             case "SERVER_ANNOUNCE":
                 return serverAnnounce(con, requestObj);
@@ -131,8 +133,8 @@ public class Control extends Thread {
                 return activityMessage(con, requestObj);
             // Request does not contain a command field
             default:
-                log.error("the received message contains a invalid command");
-                invalidMessage(con, "the received message contains a invalid command");
+                log.error(String.format("the message contained an unknown command: %s", command));
+                invalidMessage(con, String.format("the message contained an unknown command: %s", command));
                 return true;
         }
 	}
@@ -451,6 +453,7 @@ public class Control extends Thread {
                 return true;
             }
         }
+        con.setLogin(true);
         return false;
 	}
 

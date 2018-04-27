@@ -12,10 +12,10 @@ public class Settings {
 	private static SecureRandom random = new SecureRandom();
 	private static int localPort = 3780;
 	private static String localHostname = "localhost";
-	private static String remoteHostname = "sunrise.cis.unimelb.edu.au";
+	private static String remoteHostname = null;
 	private static int remotePort = 3780;
 	private static int activityInterval = 5000; // milliseconds
-	private static String secret = null;
+	private static String secret = "secret";
 	private static String username = "testusername04";
 
 	
