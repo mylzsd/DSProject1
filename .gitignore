@@ -1,6 +1,7 @@
 # Compiled source #
 ###################
 out/*
+bin/*
 *.com
 *.class
 *.dll
@@ -29,9 +30,13 @@ Thumbs.db
 .idea/*
 *.iml
 src/META-INF/*
+.project
+.classpath
 
 # Project handouts #
 ####################
+docs/*
 *.pdf
 *.htm
 *.txt
+/bin/

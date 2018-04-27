@@ -44,7 +44,7 @@ public class ClientSkeleton extends Thread {
 	
 	public ClientSkeleton() {
         setupConnection();
-	    if (Settings.getSecret() == null) {
+	    if (Settings.getSecret() == null && !Settings.getUsername().equals("anonymous")) {
             // register with new secret
             String secret = Settings.nextSecret();
             // print the secret to console
